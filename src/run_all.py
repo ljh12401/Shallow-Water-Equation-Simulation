@@ -60,7 +60,7 @@ def main() -> None:
         results.append(result)
 
     save_summary_csv(results, config.output_dir / "summary.csv")
-    plot_all(results, config.output_dir)
+    plot_all(results, config.output_dir, make_animations=True)
     print(f"done. outputs written to {config.output_dir}")
 
 

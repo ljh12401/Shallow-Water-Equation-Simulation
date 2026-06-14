@@ -1,4 +1,4 @@
-# Python
+# Python cache
 __pycache__/
 *.py[cod]
 *.pyo
@@ -20,6 +20,6 @@ outputs/
 .vscode/
 .idea/
 
-# Course PDFs are local reference material and are not needed to run the project.
+# Course PDFs are local reference material and are not needed to run the project
 *.pdf
 

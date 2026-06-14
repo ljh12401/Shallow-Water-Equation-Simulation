@@ -324,6 +324,108 @@ def animate_scenario_comparison(results: list[SimulationResult], output_dir: Pat
     animation.save(output_dir / "all_scenarios_lake_animation.gif", writer=PillowWriter(fps=12))
     plt.close(fig)
 
+def animate_4d_surface(result: SimulationResult, output_dir: Path, max_frames: int = 90) -> None:
+    """
+    4D-style lake visualization:
+    x/y position = lake grid
+    z axis = sea surface elevation zeta
+    color = velocity magnitude
+    animation = time
+    """
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    frame_ids = np.linspace(
+        0,
+        len(result.times) - 1,
+        min(max_frames, len(result.times)),
+        dtype=int,
+    )
+
+    y_km, x_km = _lake_axes(result)
+    Y, X = np.meshgrid(y_km, x_km)
+
+    u, v = velocity_components(result)
+    speed = np.sqrt(u**2 + v**2)
+
+    zeta = np.where(result.wet_mask, result.zeta, np.nan)
+    speed = np.where(result.wet_mask, speed, np.nan)
+
+    zmax = float(np.nanmax(np.abs(zeta)))
+    if zmax == 0.0:
+        zmax = 1.0
+
+    speed_max = float(np.nanmax(speed))
+    if speed_max == 0.0:
+        speed_max = 1.0
+
+    cmap = plt.cm.viridis
+    norm = plt.Normalize(vmin=0.0, vmax=speed_max)
+
+    fig = plt.figure(figsize=(8, 8), dpi=120)
+    ax = fig.add_subplot(111, projection="3d")
+
+    surf = [None]
+
+    def draw_frame(frame_id: int):
+        ax.clear()
+
+        Z = zeta[frame_id]
+        C = cmap(norm(speed[frame_id]))
+
+        surf[0] = ax.plot_surface(
+            Y,
+            X,
+            Z,
+            facecolors=C,
+            rstride=1,
+            cstride=1,
+            linewidth=0,
+            antialiased=True,
+            shade=False,
+        )
+
+        ax.set_title(
+            f"{result.name} | 4D lake surface | "
+            f"t={result.times[frame_id] / 3600.0:.2f} h"
+        )
+        ax.set_xlabel("y distance (km)")
+        ax.set_ylabel("x distance (km)")
+        ax.set_zlabel("zeta (m)")
+
+        ax.set_zlim(-zmax, zmax)
+        ax.view_init(elev=35, azim=-55)
+
+        wx, wy = result.winds[frame_id]
+        ax.text2D(
+            0.03,
+            0.94,
+            f"wind = ({wx:.0f}, {wy:.0f}) m/s",
+            transform=ax.transAxes,
+        )
+
+        return surf
+
+    draw_frame(frame_ids[0])
+
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    fig.colorbar(sm, ax=ax, shrink=0.65, label="velocity magnitude (m/s)")
+
+    animation = matplotlib.animation.FuncAnimation(
+        fig,
+        draw_frame,
+        frames=frame_ids,
+        interval=90,
+        blit=False,
+    )
+
+    animation.save(
+        output_dir / f"{result.name}_4d_surface_animation.gif",
+        writer=PillowWriter(fps=12),
+    )
+
+    plt.close(fig)
 
 def plot_vorticity_eke(results: list[SimulationResult], output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -357,5 +459,8 @@ def plot_all(results: list[SimulationResult], output_dir: Path, make_animations:
         plot_presentation_style(result, figures_dir)
         if make_animations:
             animate_lake(result, animations_dir)
+            animate_4d_surface(result, animations_dir)
     if make_animations:
-        animate_scenario_comparison(results, animations_dir)
+        animate_lake(result, animations_dir)
+        
+
