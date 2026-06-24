@@ -6,7 +6,7 @@ This project implements the semester assignment Shallow Water Equation: a four-s
 
 - `src/config.py`: physical constants, grid defaults, and manually selected time step.
 - `src/scenarios.py`: the four wind/barrier scenarios.
-- `src/model.py`: finite-difference shallow water solver for `zeta`, `U`, and `V`.
+- `src/model.py`: finite-difference shallow water solver for `zeta`, `U`, and `V`, using wet-cell-aware surface gradients and face-based closed-boundary transport fluxes.
 - `src/diagnostics.py`: velocity, vorticity, eddy kinetic energy, summary CSV, data export.
 - `src/plots.py`: figures for the assignment questions.
 - `tests/test_project.py`: data, scenario, stability, and output checks.
@@ -15,6 +15,8 @@ This project implements the semester assignment Shallow Water Equation: a four-s
 
 - `bathymetry.txt` has shape `(40, 20)`.
 - Depth `H=0` means land or closed boundary.
+- Land-water and outer-domain faces are treated as closed by setting the normal transport flux through those faces to zero.
+- Surface-elevation gradients are computed only through connected wet cells, so land cells are not treated as `zeta=0` water points.
 - Grid indices are Python zero-based indices. The required point `[25, 10]` is read as `zeta[:, 25, 10]`.
 - Plan-view figures use the intuitive plotting convention: `x index` is horizontal and `y index` is vertical. Arrays are stored internally as `(x, y)` and transposed only for display.
 - Wind components use positive `WX` eastward and positive `WY` northward. Meteorological easterly wind is represented as `WX=-10`; northward wind is represented as `WY=10`; meteorological northerly wind is represented as `WY=-5`.

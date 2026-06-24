@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 import numpy as np
 
 from src.config import ModelConfig, load_bathymetry
-from src.model import run_simulation
+from src.model import gradient_x, run_simulation, transport_divergence
 from src.plots import plot_all
 from src.scenarios import SCENARIOS, apply_artificial_barrier
 
@@ -38,6 +38,21 @@ class SweProjectTests(unittest.TestCase):
         middle_x = self.depth.shape[0] // 2
         self.assertTrue(np.all(barrier_depth[middle_x, :] == 0.0))
         self.assertEqual(barrier_depth.shape, self.depth.shape)
+
+    def test_gradient_does_not_use_dry_cell_values(self) -> None:
+        field = np.array([[1000.0], [10.0], [20.0]])
+        wet_mask = np.array([[False], [True], [True]])
+        grad = gradient_x(field, dx=1.0, wet_mask=wet_mask)
+        self.assertEqual(float(grad[1, 0]), 10.0)
+        self.assertEqual(float(grad[0, 0]), 0.0)
+
+    def test_transport_divergence_closes_land_faces(self) -> None:
+        wet_mask = np.array([[True], [False]])
+        U = np.array([[4.0], [0.0]])
+        V = np.zeros_like(U)
+        div = transport_divergence(U, V, dx=1.0, dy=1.0, wet_mask=wet_mask)
+        self.assertEqual(float(div[0, 0]), 0.0)
+        self.assertEqual(float(div[1, 0]), 0.0)
 
     def test_short_run_is_finite_and_keeps_land_masked(self) -> None:
         result = run_simulation(SCENARIOS[0], self.depth, self.config)
