@@ -32,6 +32,7 @@ def gradient_x(field: np.ndarray, dx: float, wet_mask: np.ndarray) -> np.ndarray
     if field.shape[0] < 2:
         return grad
 
+    # Dry cells are barriers, not water points with zero surface elevation.
     field = np.where(wet_mask, field, 0.0)
 
     center_wet = wet_mask[1:-1, :]
@@ -43,6 +44,7 @@ def gradient_x(field: np.ndarray, dx: float, wet_mask: np.ndarray) -> np.ndarray
     forward = center_wet & ~left_wet & right_wet
     backward = center_wet & left_wet & ~right_wet
 
+    # Use centered differences in open water and one-sided differences next to land.
     interior[central] = (field[2:, :][central] - field[:-2, :][central]) / (2.0 * dx)
     interior[forward] = (field[2:, :][forward] - field[1:-1, :][forward]) / dx
     interior[backward] = (field[1:-1, :][backward] - field[:-2, :][backward]) / dx
@@ -60,6 +62,7 @@ def gradient_y(field: np.ndarray, dy: float, wet_mask: np.ndarray) -> np.ndarray
     if field.shape[1] < 2:
         return grad
 
+    # Dry cells are barriers, not water points with zero surface elevation.
     field = np.where(wet_mask, field, 0.0)
 
     center_wet = wet_mask[:, 1:-1]
@@ -71,6 +74,7 @@ def gradient_y(field: np.ndarray, dy: float, wet_mask: np.ndarray) -> np.ndarray
     forward = center_wet & ~lower_wet & upper_wet
     backward = center_wet & lower_wet & ~upper_wet
 
+    # Use centered differences in open water and one-sided differences next to land.
     interior[central] = (field[:, 2:][central] - field[:, :-2][central]) / (2.0 * dy)
     interior[forward] = (field[:, 2:][forward] - field[:, 1:-1][forward]) / dy
     interior[backward] = (field[:, 1:-1][backward] - field[:, :-2][backward]) / dy
@@ -89,11 +93,13 @@ def _mask_dry_cells(field: np.ndarray, wet_mask: np.ndarray) -> np.ndarray:
 
 def transport_divergence(U: np.ndarray, V: np.ndarray, dx: float, dy: float, wet_mask: np.ndarray) -> np.ndarray:
     nx, ny = wet_mask.shape
+    # Face arrays include the outer domain faces, which remain zero for closed boundaries.
     x_faces = np.zeros((nx + 1, ny), dtype=float)
     y_faces = np.zeros((nx, ny + 1), dtype=float)
 
     connected_x = wet_mask[:-1, :] & wet_mask[1:, :]
     connected_y = wet_mask[:, :-1] & wet_mask[:, 1:]
+    # Only connected wet cells exchange transport; wet-land faces have zero normal flux.
     x_faces[1:nx, :] = np.where(connected_x, 0.5 * (U[:-1, :] + U[1:, :]), 0.0)
     y_faces[:, 1:ny] = np.where(connected_y, 0.5 * (V[:, :-1] + V[:, 1:]), 0.0)
 

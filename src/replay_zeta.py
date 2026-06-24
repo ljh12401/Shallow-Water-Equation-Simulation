@@ -18,6 +18,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--interval", type=float, default=0.03, help="Pause between frames in seconds.")
     parser.add_argument("--start-step", type=int, default=1, help="First model step to display.")
     parser.add_argument("--end-step", type=int, default=None, help="Last model step to display.")
+    parser.add_argument("--frame-step", type=int, default=1, help="Use every Nth saved frame in the selected step range.")
     parser.add_argument("--stream-density", type=float, default=0.95, help="Density of flow streamlines.")
     parser.add_argument("--stream-linewidth", type=float, default=0.85, help="Width of flow streamlines.")
     parser.add_argument("--stream-arrowsize", type=float, default=0.8, help="Arrow size for flow streamlines.")
@@ -77,6 +78,10 @@ def main() -> None:
         zmax = 1.0
 
     frame_ids = _frame_range(steps, args.start_step, args.end_step)
+    if args.frame_step < 1:
+        raise ValueError("--frame-step must be at least 1.")
+    # Keep full-frame GIFs possible while allowing faster sampled previews.
+    frame_ids = frame_ids[:: args.frame_step]
     nx, ny = zeta.shape[1:]
     x_index = np.arange(nx)
     y_index = np.arange(ny)
