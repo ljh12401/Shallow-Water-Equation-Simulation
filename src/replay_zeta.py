@@ -31,24 +31,28 @@ def parse_args() -> argparse.Namespace:
 def _load_replay_data(
     path: Path,
     depth_path: Path | None,
-) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None, np.ndarray, np.ndarray | None]:
+) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None, np.ndarray, np.ndarray | None, np.ndarray | None, float | None]:
     loaded = np.load(path)
 
     if isinstance(loaded, np.lib.npyio.NpzFile):
+        # Preferred replay format: includes zeta, transports, depth, and original model steps.
         zeta = loaded["zeta"]
         U = loaded["U"] if "U" in loaded.files else None
         V = loaded["V"] if "V" in loaded.files else None
         steps = loaded["steps"] if "steps" in loaded.files else np.arange(zeta.shape[0])
         depth = loaded["depth"] if "depth" in loaded.files else None
-        return zeta, U, V, steps, depth
+        winds = loaded["winds"] if "winds" in loaded.files else None
+        dt = float(loaded["dt"]) if "dt" in loaded.files else None
+        return zeta, U, V, steps, depth, winds, dt
 
     zeta = np.asarray(loaded)
     if zeta.ndim != 3:
         raise ValueError(".npy input must have shape (frames, x, y).")
 
+    # A bare .npy file can replay zeta only; depth is optional and used only for masking land.
     depth = np.loadtxt(depth_path, dtype=float) if depth_path is not None else None
     steps = np.arange(zeta.shape[0])
-    return zeta, None, None, steps, depth
+    return zeta, None, None, steps, depth, None, None
 
 
 def _frame_range(steps: np.ndarray, start_step: int, end_step: int | None) -> np.ndarray:
@@ -61,7 +65,7 @@ def _frame_range(steps: np.ndarray, start_step: int, end_step: int | None) -> np
 
 def main() -> None:
     args = parse_args()
-    zeta, U, V, steps, depth = _load_replay_data(args.input, args.depth)
+    zeta, U, V, steps, depth, winds, dt = _load_replay_data(args.input, args.depth)
 
     wet_mask = depth > 0.0 if depth is not None else np.isfinite(zeta[0])
     zeta = np.where(wet_mask, zeta, np.nan)
@@ -109,6 +113,7 @@ def main() -> None:
     colorbar.set_label("zeta (m)")
 
     def draw_flow_base() -> None:
+        # streamplot creates new artists every frame, so redraw the flow axis from a clean base.
         flow_ax.clear()
         flow_ax.contourf(x_index, y_index, wet_mask.T.astype(float), levels=[0.5, 1.5], colors=["#f7fbff"], alpha=1.0)
         if depth is not None:
@@ -127,6 +132,7 @@ def main() -> None:
         speed_max = float(np.nanmax(speed))
         if speed_max == 0.0:
             speed_max = 1.0
+        # Fixed normalization prevents the velocity colorbar from changing during animation.
         speed_norm = Normalize(vmin=0.0, vmax=speed_max)
         flow_colorbar = fig.colorbar(
             ScalarMappable(norm=speed_norm, cmap="Spectral_r"),
@@ -148,6 +154,16 @@ def main() -> None:
 
     title = fig.suptitle("")
 
+    def frame_title(frame_id: int) -> str:
+        step = int(steps[frame_id])
+        time_label = f", t={step * dt / 3600:.2f} h" if dt is not None else ""
+        if winds is not None:
+            wx, wy = winds[frame_id]
+            wind_label = f"wind=({wx:.0f}, {wy:.0f}) m/s"
+        else:
+            wind_label = "wind unavailable"
+        return f"{args.input.stem} | step={step}{time_label} | {wind_label}"
+
     def update(frame_id: int):
         image.set_data(zeta[frame_id].T)
         if u is not None and v is not None and speed is not None and speed_norm is not None:
@@ -164,7 +180,7 @@ def main() -> None:
                 linewidth=args.stream_linewidth,
                 arrowsize=args.stream_arrowsize,
             )
-        title.set_text(f"{args.input.stem} | step={int(steps[frame_id])}")
+        title.set_text(frame_title(frame_id))
         return (image,)
 
     if args.save_gif is not None:

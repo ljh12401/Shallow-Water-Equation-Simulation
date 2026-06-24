@@ -92,6 +92,8 @@ def _mask_dry_cells(field: np.ndarray, wet_mask: np.ndarray) -> np.ndarray:
 
 
 def transport_divergence(U: np.ndarray, V: np.ndarray, dx: float, dy: float, wet_mask: np.ndarray) -> np.ndarray:
+    """Compute flux-form transport divergence with closed wet-land faces."""
+
     nx, ny = wet_mask.shape
     # Face arrays include the outer domain faces, which remain zero for closed boundaries.
     x_faces = np.zeros((nx + 1, ny), dtype=float)
@@ -116,6 +118,8 @@ def step_forward(
     wind_y: float,
     config: ModelConfig,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Advance zeta and transports by one explicit Euler time step."""
+
     wet_mask = depth > 0.0
     safe_depth = np.where(wet_mask, depth, 1.0)
 

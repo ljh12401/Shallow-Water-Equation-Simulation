@@ -8,6 +8,7 @@ from pathlib import Path
 cache_root = Path(__file__).resolve().parents[1] / ".cache"
 cache_root.mkdir(parents=True, exist_ok=True)
 (cache_root / "matplotlib").mkdir(parents=True, exist_ok=True)
+# Keep Matplotlib cache inside the project so repeated live runs do not depend on user-level cache paths.
 os.environ.setdefault("XDG_CACHE_HOME", str(cache_root))
 os.environ.setdefault("MPLCONFIGDIR", str(cache_root / "matplotlib"))
 
@@ -31,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--draw-every", type=int, default=5, help="Refresh the figure every N model steps.")
     parser.add_argument("--dx", type=float, default=1000.0, help="Grid spacing in x direction, meters.")
     parser.add_argument("--dy", type=float, default=1000.0, help="Grid spacing in y direction, meters.")
-    parser.add_argument("--dt", type=float, default=5.0, help="Time step in seconds.")
+    parser.add_argument("--dt", type=float, default=20.0, help="Time step in seconds.")
     parser.add_argument("--pause", type=float, default=0.03, help="Pause duration between rendered frames.")
     parser.add_argument("--no-block", action="store_true", help="Exit immediately when the computation finishes.")
     return parser.parse_args()
@@ -45,6 +46,8 @@ def find_scenario(name: str) -> Scenario:
 
 
 def velocity(U: np.ndarray, V: np.ndarray, depth: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Convert transports to depth-averaged velocities for plotting."""
+
     safe_depth = np.where(depth > 0.0, depth, np.nan)
     return U / safe_depth, V / safe_depth
 
@@ -69,6 +72,7 @@ def main() -> None:
     )
     x_index = np.arange(depth.shape[0])
     y_index = np.arange(depth.shape[1])
+    # quiver expects display-space arrays; transpose velocity components when updating.
     xx, yy = np.meshgrid(x_index, y_index)
     stride = 2
 
@@ -118,6 +122,7 @@ def main() -> None:
             steps.append(step)
             point_zeta.append(float(zeta[point_i, point_j]))
 
+            # Live rendering rescales zeta to keep small early changes visible.
             zeta_scale = max(0.02, float(np.nanmax(np.abs(np.where(wet_mask, zeta, np.nan)))) * 1.1)
             image.set_data(np.where(wet_mask, zeta, np.nan).T)
             image.set_clim(-zeta_scale, zeta_scale)

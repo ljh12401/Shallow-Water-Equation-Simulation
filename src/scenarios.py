@@ -18,10 +18,14 @@ class Scenario:
 
 
 def scenario_1_wind(step: int) -> tuple[float, float]:
+    """Constant easterly wind represented as negative x velocity."""
+
     return -10.0, 0.0
 
 
 def scenario_2_wind(step: int) -> tuple[float, float]:
+    """Piecewise forcing from the assignment: northward, then easterly, then calm."""
+
     if step < 50:
         return 0.0, 10.0
     if step < 250:
@@ -30,6 +34,8 @@ def scenario_2_wind(step: int) -> tuple[float, float]:
 
 
 def scenario_3_wind(step: int) -> tuple[float, float]:
+    """Scenario 2 variant with an initial combined easterly and northerly wind."""
+
     if step < 50:
         return -10.0, -5.0
     if step < 250:
@@ -66,6 +72,7 @@ def apply_artificial_barrier(depth: np.ndarray) -> np.ndarray:
     """Set the middle x transect to land, creating a barrier along the y direction."""
 
     modified = depth.copy()
+    # The barrier uses H=0, so it is handled exactly like the original land mask.
     middle_x = modified.shape[0] // 2
     modified[middle_x, :] = 0.0
     return modified

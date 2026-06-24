@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import textwrap
 from pathlib import Path
 
 cache_root = Path(__file__).resolve().parents[1] / ".cache"
@@ -11,6 +12,7 @@ os.environ.setdefault("MPLCONFIGDIR", str(cache_root / "matplotlib"))
 
 import matplotlib
 
+# The non-interactive backend keeps batch figure generation stable on headless systems.
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
@@ -31,6 +33,7 @@ def _extent(result: SimulationResult) -> tuple[float, float, float, float]:
 
 
 def _imshow(ax: plt.Axes, field: np.ndarray, result: SimulationResult, title: str, cmap: str = "viridis") -> None:
+    # Model arrays are stored as (x, y); imshow expects display rows/columns, so transpose for plotting.
     im = ax.imshow(
         field.T,
         origin="lower",
@@ -51,11 +54,17 @@ def _lake_axes(result: SimulationResult) -> tuple[np.ndarray, np.ndarray]:
     return x_index, y_index
 
 
+def _wind_label(result: SimulationResult, frame: int) -> str:
+    wx, wy = result.winds[frame]
+    return f"wind=({wx:.0f}, {wy:.0f}) m/s"
+
+
 def _plot_stream_snapshot(ax: plt.Axes, result: SimulationResult, frame: int, title: str) -> None:
     x_index, y_index = _lake_axes(result)
     u, v = velocity_components(result)
     speed = np.sqrt(u[frame] ** 2 + v[frame] ** 2)
     wet = result.wet_mask
+    # Mask land cells so streamlines stop at the lake boundary instead of crossing dry cells.
     u_frame = np.ma.array(u[frame].T, mask=~wet.T)
     v_frame = np.ma.array(v[frame].T, mask=~wet.T)
     color_field = np.ma.array(speed.T, mask=~wet.T)
@@ -120,6 +129,7 @@ def plot_mean_std_maps(result: SimulationResult, output_dir: Path) -> None:
 def plot_hovmoller(results: list[SimulationResult], output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     x_index = results[0].config.transect_x_index
+    # Hovmoller view fixes x and shows zeta evolving over y and time.
     transects = [np.where(result.wet_mask[x_index, :], result.zeta[:, x_index, :], np.nan) for result in results]
     zmax = max(float(np.nanmax(np.abs(transect))) for transect in transects)
     if zmax == 0.0:
@@ -152,13 +162,16 @@ def plot_hovmoller(results: list[SimulationResult], output_path: Path) -> None:
 
 def plot_flow_snapshots(result: SimulationResult, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
+    # Use representative saved frames rather than every model step for a compact summary figure.
     frame_indices = sorted({0, len(result.times) // 3, 2 * len(result.times) // 3, len(result.times) - 1})
-    fig, axes = plt.subplots(2, 2, figsize=(11, 7), dpi=160)
+    fig, axes = plt.subplots(2, 2, figsize=(11, 7.6), dpi=160)
     axes = axes.ravel()
     for ax, idx in zip(axes, frame_indices):
-        _plot_stream_snapshot(ax, result, idx, f"step={result.steps[idx]}")
-    fig.suptitle(f"{result.name}: flow snapshots")
-    fig.tight_layout()
+        title = f"step={result.steps[idx]}, t={result.times[idx] / 3600:.2f} h\n{_wind_label(result, idx)}"
+        _plot_stream_snapshot(ax, result, idx, title)
+    scenario_title = textwrap.fill(result.description, width=92)
+    fig.suptitle(f"{result.name}: flow snapshots\n{scenario_title}", y=0.985)
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
     fig.savefig(output_dir / f"{result.name}_flow_snapshots.png")
     plt.close(fig)
 

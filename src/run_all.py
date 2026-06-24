@@ -24,6 +24,7 @@ def parse_args() -> argparse.Namespace:
 
 def build_config(args: argparse.Namespace) -> ModelConfig:
     config = ModelConfig()
+    # Keep dataclass defaults unless the CLI explicitly overrides them.
     replacements = {}
     if args.steps is not None:
         replacements["steps"] = args.steps
@@ -58,6 +59,7 @@ def main() -> None:
     for scenario in SCENARIOS:
         print(f"running {scenario.name}: {scenario.description}")
         result = run_simulation(scenario, depth, config)
+        # Save raw arrays before plotting so figures can be regenerated or replayed later.
         save_npz(result, data_dir / f"{scenario.name}.npz")
         results.append(result)
 
