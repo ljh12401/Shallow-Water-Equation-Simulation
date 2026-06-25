@@ -25,48 +25,7 @@ The model uses a depth-averaged shallow-water formulation. The prognostic variab
 - $V$: depth-integrated transport in the y direction
 - $H$: still-water depth from the bathymetry grid
 
-The momentum equations are implemented in the form:
 
-$$
-\begin{aligned}
-\frac{\partial U}{\partial t}
-&= -gH\frac{\partial \zeta}{\partial x}
-   - D(U,V)U
-   + C_w W_x|\mathbf{W}|
-   + fV, \\
-\frac{\partial V}{\partial t}
-&= -gH\frac{\partial \zeta}{\partial y}
-   - D(U,V)V
-   + C_w W_y|\mathbf{W}|
-   - fU .
-\end{aligned}
-$$
-
-where:
-
-$$
-\begin{aligned}
-D(U,V) &= C_d\frac{\sqrt{U^2 + V^2}}{H^2}, \\
-|\mathbf{W}| &= \sqrt{W_x^2 + W_y^2}, \\
-f &= 2\Omega\sin(\phi).
-\end{aligned}
-$$
-
-Here $C_w$ is `wind_stress`, $C_d$ is `friction`, and $\phi$ is the model latitude.
-
-The continuity equation updates the free surface from the transport divergence:
-
-$$
-\frac{\partial \zeta}{\partial t}
-= -\frac{\partial U}{\partial x}
-  -\frac{\partial V}{\partial y}.
-$$
-
-The diagnostic depth-averaged velocities are computed after the run as:
-
-$$
-u = \frac{U}{H}, \qquad v = \frac{V}{H}.
-$$
 
 ## Numerical Pipeline
 
