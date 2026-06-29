@@ -10,10 +10,12 @@ from matplotlib.colors import Normalize
 from matplotlib.animation import PillowWriter
 import numpy as np
 
+from .diagnostics import transports_to_cell_velocity
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Replay saved lake-model zeta and flow fields from a .npz or .npy file.")
-    parser.add_argument("input", type=Path, help="Saved result file, e.g. outputs/data/scenario_1.npz.")
+    parser.add_argument("input", type=Path, help="Saved result file, e.g. outputs/staggered/data/scenario_1.npz.")
     parser.add_argument("--depth", type=Path, default=None, help="Bathymetry file for masking land when input is .npy.")
     parser.add_argument("--interval", type=float, default=0.03, help="Pause between frames in seconds.")
     parser.add_argument("--start-step", type=int, default=1, help="First model step to display.")
@@ -70,9 +72,7 @@ def main() -> None:
     wet_mask = depth > 0.0 if depth is not None else np.isfinite(zeta[0])
     zeta = np.where(wet_mask, zeta, np.nan)
     if U is not None and V is not None and depth is not None:
-        safe_depth = np.where(wet_mask, depth, np.nan)
-        u = np.where(wet_mask, U / safe_depth, np.nan)
-        v = np.where(wet_mask, V / safe_depth, np.nan)
+        u, v = transports_to_cell_velocity(U, V, depth)
     else:
         u = None
         v = None

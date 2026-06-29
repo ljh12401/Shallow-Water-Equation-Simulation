@@ -91,6 +91,46 @@ def _mask_dry_cells(field: np.ndarray, wet_mask: np.ndarray) -> np.ndarray:
     return np.where(wet_mask, field, 0.0)
 
 
+def _staggered_face_masks(wet_mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    nx, ny = wet_mask.shape
+    u_mask = np.zeros((nx + 1, ny), dtype=bool)
+    v_mask = np.zeros((nx, ny + 1), dtype=bool)
+    u_mask[1:nx, :] = wet_mask[:-1, :] & wet_mask[1:, :]
+    v_mask[:, 1:ny] = wet_mask[:, :-1] & wet_mask[:, 1:]
+    return u_mask, v_mask
+
+
+def _staggered_face_depths(depth: np.ndarray, u_mask: np.ndarray, v_mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    nx, ny = depth.shape
+    u_depth = np.ones((nx + 1, ny), dtype=float)
+    v_depth = np.ones((nx, ny + 1), dtype=float)
+    u_depth[1:nx, :] = 0.5 * (depth[:-1, :] + depth[1:, :])
+    v_depth[:, 1:ny] = 0.5 * (depth[:, :-1] + depth[:, 1:])
+    return np.where(u_mask, u_depth, 1.0), np.where(v_mask, v_depth, 1.0)
+
+
+def _v_at_u_faces(V: np.ndarray, v_mask: np.ndarray, u_shape: tuple[int, int]) -> np.ndarray:
+    sampled = np.zeros(u_shape, dtype=float)
+    weights = np.zeros(u_shape, dtype=float)
+    value_blocks = (V[:-1, :-1], V[:-1, 1:], V[1:, :-1], V[1:, 1:])
+    mask_blocks = (v_mask[:-1, :-1], v_mask[:-1, 1:], v_mask[1:, :-1], v_mask[1:, 1:])
+    for values, masks in zip(value_blocks, mask_blocks):
+        sampled[1:-1, :] += np.where(masks, values, 0.0)
+        weights[1:-1, :] += masks.astype(float)
+    return np.divide(sampled, weights, out=np.zeros_like(sampled), where=weights > 0.0)
+
+
+def _u_at_v_faces(U: np.ndarray, u_mask: np.ndarray, v_shape: tuple[int, int]) -> np.ndarray:
+    sampled = np.zeros(v_shape, dtype=float)
+    weights = np.zeros(v_shape, dtype=float)
+    value_blocks = (U[:-1, :-1], U[1:, :-1], U[:-1, 1:], U[1:, 1:])
+    mask_blocks = (u_mask[:-1, :-1], u_mask[1:, :-1], u_mask[:-1, 1:], u_mask[1:, 1:])
+    for values, masks in zip(value_blocks, mask_blocks):
+        sampled[:, 1:-1] += np.where(masks, values, 0.0)
+        weights[:, 1:-1] += masks.astype(float)
+    return np.divide(sampled, weights, out=np.zeros_like(sampled), where=weights > 0.0)
+
+
 def transport_divergence(U: np.ndarray, V: np.ndarray, dx: float, dy: float, wet_mask: np.ndarray) -> np.ndarray:
     """Compute flux-form transport divergence with closed wet-land faces."""
 
@@ -109,7 +149,26 @@ def transport_divergence(U: np.ndarray, V: np.ndarray, dx: float, dy: float, wet
     return np.where(wet_mask, divergence, 0.0)
 
 
-def step_forward(
+def staggered_transport_divergence(U: np.ndarray, V: np.ndarray, dx: float, dy: float, wet_mask: np.ndarray) -> np.ndarray:
+    """Compute cell-centered divergence from transports stored directly on cell faces."""
+
+    divergence = (U[1:, :] - U[:-1, :]) / dx + (V[:, 1:] - V[:, :-1]) / dy
+    return np.where(wet_mask, divergence, 0.0)
+
+
+def initialize_state(depth: np.ndarray, config: ModelConfig) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Create zeta and transport arrays for the configured grid arrangement."""
+
+    zeta = np.zeros(depth.shape, dtype=float)
+    if config.grid_mode == "collocated":
+        return zeta, np.zeros(depth.shape, dtype=float), np.zeros(depth.shape, dtype=float)
+    if config.grid_mode == "staggered":
+        nx, ny = depth.shape
+        return zeta, np.zeros((nx + 1, ny), dtype=float), np.zeros((nx, ny + 1), dtype=float)
+    raise ValueError(f"Unknown grid_mode: {config.grid_mode}")
+
+
+def _step_forward_collocated(
     zeta: np.ndarray,
     U: np.ndarray,
     V: np.ndarray,
@@ -118,7 +177,7 @@ def step_forward(
     wind_y: float,
     config: ModelConfig,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Advance zeta and transports by one explicit Euler time step."""
+    """Advance cell-centered zeta and transports by one explicit Euler time step."""
 
     wet_mask = depth > 0.0
     safe_depth = np.where(wet_mask, depth, 1.0)
@@ -155,6 +214,78 @@ def step_forward(
     return next_zeta, next_U, next_V
 
 
+def _step_forward_staggered(
+    zeta: np.ndarray,
+    U: np.ndarray,
+    V: np.ndarray,
+    depth: np.ndarray,
+    wind_x: float,
+    wind_y: float,
+    config: ModelConfig,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Advance cell-centered zeta and face-centered transports by one explicit Euler time step."""
+
+    wet_mask = depth > 0.0
+    u_mask, v_mask = _staggered_face_masks(wet_mask)
+    u_depth, v_depth = _staggered_face_depths(depth, u_mask, v_mask)
+
+    zeta_x = np.zeros_like(U)
+    zeta_y = np.zeros_like(V)
+    zeta_x[1:-1, :] = np.where(u_mask[1:-1, :], (zeta[1:, :] - zeta[:-1, :]) / config.dx, 0.0)
+    zeta_y[:, 1:-1] = np.where(v_mask[:, 1:-1], (zeta[:, 1:] - zeta[:, :-1]) / config.dy, 0.0)
+
+    V_on_U = _v_at_u_faces(V, v_mask, U.shape)
+    U_on_V = _u_at_v_faces(U, u_mask, V.shape)
+    wind_speed = float(np.hypot(wind_x, wind_y))
+
+    u_transport_speed = np.sqrt(U * U + V_on_U * V_on_U)
+    v_transport_speed = np.sqrt(U_on_V * U_on_V + V * V)
+    u_drag = config.friction * u_transport_speed / (u_depth * u_depth)
+    v_drag = config.friction * v_transport_speed / (v_depth * v_depth)
+
+    dUdt = (
+        -config.g * u_depth * zeta_x
+        - u_drag * U
+        + config.wind_stress * wind_x * wind_speed
+        + config.coriolis_f * V_on_U
+    )
+    dVdt = (
+        -config.g * v_depth * zeta_y
+        - v_drag * V
+        + config.wind_stress * wind_y * wind_speed
+        - config.coriolis_f * U_on_V
+    )
+
+    next_U = np.where(u_mask, U + config.dt * dUdt, 0.0)
+    next_V = np.where(v_mask, V + config.dt * dVdt, 0.0)
+
+    div_transport = staggered_transport_divergence(next_U, next_V, config.dx, config.dy, wet_mask)
+    next_zeta = np.where(wet_mask, zeta - config.dt * div_transport, 0.0)
+
+    if not np.all(np.isfinite(next_zeta)) or not np.all(np.isfinite(next_U)) or not np.all(np.isfinite(next_V)):
+        raise FloatingPointError("Simulation produced NaN or infinite values.")
+
+    return next_zeta, next_U, next_V
+
+
+def step_forward(
+    zeta: np.ndarray,
+    U: np.ndarray,
+    V: np.ndarray,
+    depth: np.ndarray,
+    wind_x: float,
+    wind_y: float,
+    config: ModelConfig,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Advance zeta and transports using the configured grid arrangement."""
+
+    if config.grid_mode == "collocated":
+        return _step_forward_collocated(zeta, U, V, depth, wind_x, wind_y, config)
+    if config.grid_mode == "staggered":
+        return _step_forward_staggered(zeta, U, V, depth, wind_x, wind_y, config)
+    raise ValueError(f"Unknown grid_mode: {config.grid_mode}")
+
+
 def run_simulation(
     scenario: Scenario,
     depth: np.ndarray,
@@ -162,11 +293,7 @@ def run_simulation(
 ) -> SimulationResult:
     scenario_depth = apply_artificial_barrier(depth) if scenario.add_barrier else depth.copy()
     wet_mask = scenario_depth > 0.0
-    shape = scenario_depth.shape
-
-    zeta = np.zeros(shape, dtype=float)
-    U = np.zeros(shape, dtype=float)
-    V = np.zeros(shape, dtype=float)
+    zeta, U, V = initialize_state(scenario_depth, config)
 
     saved_zeta: list[np.ndarray] = []
     saved_U: list[np.ndarray] = []
@@ -190,8 +317,13 @@ def run_simulation(
         wind_x, wind_y = scenario.wind(step)
         zeta, U, V = step_forward(zeta, U, V, scenario_depth, wind_x, wind_y, config)
         zeta = np.where(wet_mask, zeta, 0.0)
-        U = _mask_dry_cells(U, wet_mask)
-        V = _mask_dry_cells(V, wet_mask)
+        if config.grid_mode == "collocated":
+            U = _mask_dry_cells(U, wet_mask)
+            V = _mask_dry_cells(V, wet_mask)
+        else:
+            u_mask, v_mask = _staggered_face_masks(wet_mask)
+            U = np.where(u_mask, U, 0.0)
+            V = np.where(v_mask, V, 0.0)
 
     return SimulationResult(
         name=scenario.name,

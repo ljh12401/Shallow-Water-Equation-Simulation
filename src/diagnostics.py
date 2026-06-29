@@ -8,13 +8,34 @@ import numpy as np
 from .model import SimulationResult, gradient_x, gradient_y
 
 
+def transports_to_cell_velocity(U: np.ndarray, V: np.ndarray, depth: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Convert collocated or staggered transports into cell-centered velocities."""
+
+    nx, ny = depth.shape
+    safe_depth = np.where(depth > 0.0, depth, np.nan)
+
+    if U.shape[-2:] == depth.shape and V.shape[-2:] == depth.shape:
+        u_transport = U
+        v_transport = V
+    elif U.shape[-2:] == (nx + 1, ny) and V.shape[-2:] == (nx, ny + 1):
+        u_transport = 0.5 * (U[..., :-1, :] + U[..., 1:, :])
+        v_transport = 0.5 * (V[..., :, :-1] + V[..., :, 1:])
+    else:
+        raise ValueError(
+            "Transport arrays must either match depth shape or use staggered shapes "
+            f"U=(nx+1, ny), V=(nx, ny+1); got U={U.shape[-2:]}, V={V.shape[-2:]}, depth={depth.shape}."
+        )
+
+    u = u_transport / safe_depth
+    v = v_transport / safe_depth
+    wet_mask = depth > 0.0
+    return np.where(wet_mask, u, np.nan), np.where(wet_mask, v, np.nan)
+
+
 def velocity_components(result: SimulationResult) -> tuple[np.ndarray, np.ndarray]:
     """Convert depth-integrated transports U/V into depth-averaged velocities."""
 
-    safe_depth = np.where(result.depth > 0.0, result.depth, np.nan)
-    u = result.U / safe_depth
-    v = result.V / safe_depth
-    return u, v
+    return transports_to_cell_velocity(result.U, result.V, result.depth)
 
 
 def masked_stats(field: np.ndarray, wet_mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -31,11 +52,11 @@ def vorticity(result: SimulationResult) -> np.ndarray:
     """Compute vertical vorticity from depth-averaged velocity."""
 
     wet_mask = result.wet_mask
+    u_all, v_all = velocity_components(result)
     vort = []
-    for U, V in zip(result.U, result.V):
-        safe_depth = np.where(wet_mask, result.depth, np.nan)
-        u = np.nan_to_num(U / safe_depth)
-        v = np.nan_to_num(V / safe_depth)
+    for u_frame, v_frame in zip(u_all, v_all):
+        u = np.nan_to_num(u_frame)
+        v = np.nan_to_num(v_frame)
         dvdx = gradient_x(v, result.config.dx, wet_mask)
         dudy = gradient_y(u, result.config.dy, wet_mask)
         vort.append(np.where(wet_mask, dvdx - dudy, np.nan))
@@ -52,15 +73,6 @@ def eddy_kinetic_energy(result: SimulationResult) -> np.ndarray:
     v_mean[result.wet_mask] = np.mean(v[:, result.wet_mask], axis=0)
     eke = 0.5 * ((u - u_mean) ** 2 + (v - v_mean) ** 2)
     return np.where(result.wet_mask, eke, np.nan)
-
-
-def net_transport_through_channel(result: SimulationResult, y_index: int | None = None) -> np.ndarray:
-    """Estimate net north-south transport through a y-index channel."""
-
-    if y_index is None:
-        y_index = result.depth.shape[1] // 2
-    channel_v = np.where(result.depth[:, y_index] > 0.0, result.V[:, :, y_index], 0.0)
-    return np.sum(channel_v, axis=1) * result.config.dx
 
 
 def scenario_summary(result: SimulationResult) -> dict[str, float | str]:
@@ -108,4 +120,5 @@ def save_npz(result: SimulationResult, output_path: Path) -> None:
         V=result.V,
         winds=result.winds,
         dt=result.dt,
+        grid_mode=result.config.grid_mode,
     )

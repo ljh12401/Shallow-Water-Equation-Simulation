@@ -18,6 +18,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dx", type=float, default=None, help="Grid spacing in x direction, meters.")
     parser.add_argument("--dy", type=float, default=None, help="Grid spacing in y direction, meters.")
     parser.add_argument("--dt", type=float, default=None, help="Time step in seconds.")
+    parser.add_argument(
+        "--grid-mode",
+        choices=("staggered", "collocated"),
+        default=None,
+        help="Grid arrangement for prognostic transports.",
+    )
     parser.add_argument("--output-dir", type=Path, default=None, help="Directory for figures and data.")
     return parser.parse_args()
 
@@ -26,6 +32,7 @@ def build_config(args: argparse.Namespace) -> ModelConfig:
     config = ModelConfig()
     # Keep dataclass defaults unless the CLI explicitly overrides them.
     replacements = {}
+    grid_mode = args.grid_mode if args.grid_mode is not None else config.grid_mode
     if args.steps is not None:
         replacements["steps"] = args.steps
     if args.output_every is not None:
@@ -36,8 +43,12 @@ def build_config(args: argparse.Namespace) -> ModelConfig:
         replacements["dy"] = args.dy
     if args.dt is not None:
         replacements["dt"] = args.dt
+    if args.grid_mode is not None:
+        replacements["grid_mode"] = args.grid_mode
     if args.output_dir is not None:
         replacements["output_dir"] = args.output_dir
+    else:
+        replacements["output_dir"] = config.output_dir / grid_mode
     return replace(config, **replacements)
 
 
@@ -52,6 +63,7 @@ def main() -> None:
     print(f"bathymetry: {config.bathymetry_path}")
     print(f"grid shape: {depth.shape}, max depth: {depth.max():.1f} m")
     print(f"dx={config.dx:.1f} m, dy={config.dy:.1f} m, dt={config.dt:.3f} s")
+    print(f"grid_mode={config.grid_mode}")
     print(f"steps={config.steps}, output_every={config.output_every}")
 
     results = []

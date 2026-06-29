@@ -26,8 +26,8 @@ from .scenarios import SCENARIOS
 
 
 PHYSICAL_DURATION_SECONDS = 20_000.0
-DT_VALUES_SECONDS = (5, 10, 20, 40, 60, 80, 85, 90, 95, 100, 120)
-GRID_SPACING_VALUES_METERS = (100, 150, 200, 225, 250, 300, 500, 750, 1000, 1500, 2000)
+DT_VALUES_SECONDS = (5, 10, 20, 30, 35, 37.5, 40, 45, 50)
+GRID_SPACING_VALUES_METERS = (300, 400, 500, 525, 600, 750, 1000, 1500, 2000)
 
 
 def _cfl_numbers(config: ModelConfig, depth: np.ndarray) -> tuple[float, float]:
@@ -73,6 +73,7 @@ def _run_case(kind: str, value: float, base_config: ModelConfig, depth: np.ndarr
     cfl_1d, cfl_2d = _cfl_numbers(config, depth)
     row: dict[str, float | str] = {
         "experiment": kind,
+        "grid_mode": config.grid_mode,
         "parameter_value": value,
         "dx_m": config.dx,
         "dy_m": config.dy,
@@ -106,6 +107,7 @@ def _write_csv(rows: list[dict[str, float | str]], output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
         "experiment",
+        "grid_mode",
         "parameter_value",
         "dx_m",
         "dy_m",
@@ -165,8 +167,9 @@ def main() -> None:
     for value in GRID_SPACING_VALUES_METERS:
         rows.append(_run_case("grid_spacing", float(value), config, depth))
 
-    figures_dir = config.output_dir / "figures"
-    data_dir = config.output_dir / "data"
+    stability_dir = config.output_dir / "stability"
+    figures_dir = stability_dir / "figures"
+    data_dir = stability_dir / "data"
     _write_csv(rows, data_dir / "stability_experiments.csv")
     _plot_sweep([row for row in rows if row["experiment"] == "dt"], "dt (s)", figures_dir / "stability_dt_sweep.png")
     _plot_sweep(

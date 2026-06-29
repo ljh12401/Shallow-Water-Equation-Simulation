@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 
@@ -20,6 +21,7 @@ class ModelConfig:
     dx: float = 1000.0
     dy: float = 1000.0
     dt: float = 20.0
+    grid_mode: Literal["staggered", "collocated"] = "staggered"
     steps: int = 1000
     output_every: int = 1
     g: float = 9.81
