@@ -227,24 +227,11 @@ Both grid arrangements were run with the same scenarios, forcing, bathymetry, an
 
 ![Grid-mode diagnostic comparison](assets/results/grid_mode_comparison.png)
 
-| Scenario | Staggered max `|zeta|` (m) | Collocated max `|zeta|` (m) | `zeta` RMSE (m) | `u` RMSE (m/s) | `v` RMSE (m/s) | Staggered mean EKE | Collocated mean EKE |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `scenario_1` | 0.0805 | 0.0805 | 0.0038 | 0.0173 | 0.0153 | 3.91e-4 | 4.55e-4 |
-| `scenario_2` | 0.1090 | 0.1103 | 0.0090 | 0.0084 | 0.0086 | 3.09e-4 | 3.28e-4 |
-| `scenario_3` | 0.0921 | 0.0893 | 0.0065 | 0.0091 | 0.0087 | 2.34e-4 | 2.62e-4 |
-| `scenario_4` | 0.0554 | 0.0616 | 0.0060 | 0.0114 | 0.0086 | 7.63e-5 | 9.40e-5 |
+| Scenario | Max zeta S/C (m) | Mean zeta diff. (m) | Max speed S/C (m/s) | Mean speed S/C (m/s) | Mean EKE S/C |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `scenario_1` | 0.0805 / 0.0805 | 0.0028 | 0.253 / 0.247 | 0.042 / 0.047 | 3.91e-4 / 4.55e-4 |
+| `scenario_2` | 0.1090 / 0.1103 | 0.0061 | 0.177 / 0.181 | 0.023 / 0.024 | 3.09e-4 / 3.28e-4 |
+| `scenario_3` | 0.0921 / 0.0893 | 0.0046 | 0.174 / 0.177 | 0.024 / 0.027 | 2.34e-4 / 2.62e-4 |
+| `scenario_4` | 0.0554 / 0.0616 | 0.0042 | 0.113 / 0.154 | 0.021 / 0.024 | 7.63e-5 / 9.40e-5 |
 
-Additional direct-difference metrics:
-
-| Scenario | Mean `|zeta|` diff. (m) | Max `|zeta|` diff. (m) | Max speed, staggered/collocated (m/s) | Mean speed, staggered/collocated (m/s) |
-| --- | ---: | ---: | ---: | ---: |
-| `scenario_1` | 0.0028 | 0.0293 | 0.253 / 0.247 | 0.042 / 0.047 |
-| `scenario_2` | 0.0061 | 0.0623 | 0.177 / 0.181 | 0.023 / 0.024 |
-| `scenario_3` | 0.0046 | 0.0429 | 0.174 / 0.177 | 0.024 / 0.027 |
-| `scenario_4` | 0.0042 | 0.0407 | 0.113 / 0.154 | 0.021 / 0.024 |
-
-The two modes produce similar free-surface amplitudes, with `zeta` RMSE values below `0.01 m` across all scenarios. The main difference is that the collocated output is consistently more energetic: mean EKE is higher in every scenario, by about `6%` to `19%` relative to the staggered result.
-
-The extra energy also appears as rougher spatial fields. A frame-by-frame neighbor-jump diagnostic shows collocated `zeta` fields with `30%` to `54%` larger adjacent-cell changes, and collocated velocity fields with `21%` to `29%` larger adjacent-cell changes. In the Hovmoller plots, this shows up as blockier, more mottled bands, while the staggered result keeps smoother basin-scale oscillation patterns. The difference is strongest in `scenario_4`, where the collocated run reaches a higher local speed peak (`0.154 m/s` versus `0.113 m/s`) around the artificial barrier.
-
-On these results alone, the staggered run is the more reasonable default: it preserves the same large-scale free-surface response while avoiding the extra small-scale roughness and systematically elevated kinetic energy seen in the collocated output.
+The two modes produce nearly the same free-surface amplitude; the mean absolute zeta difference stays at only a few millimeters. The main difference is kinetic: the collocated run has higher mean EKE in every scenario, while the staggered run is smoother and is therefore the preferred default.
